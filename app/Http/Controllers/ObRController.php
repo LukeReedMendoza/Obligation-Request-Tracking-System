@@ -143,11 +143,21 @@ class ObRController extends Controller
                 
             $filename = "ObR_Report" . $fileDateInfo . ".csv";
 
+            // THE FIX 1: Clearer Column Headers for the Excel file
             $columns = [
-                'Date', 'Time Received', 'ObR No.', 'Time', 'Analyze and Control', 
-                'Time', 'Checked and Clarified by:', 'Time Release', 'Total Time', 'Remarks'                    
+                'Date', 
+                'Time Received', 
+                'ObR No.', 
+                'Time', 
+                'Analyze and Control', 
+                'Time', 
+                'Checked and Clarified by:', 
+                'Time Released', 
+                'Total Time', 
+                'Remarks'                    
             ];
 
+            // Formatter for the very last column (Total Duration)
             $formatTime = function($mins) {
                 $mins = (int) round($mins); 
                 if ($mins <= 0) return "< 1 min";
@@ -165,29 +175,29 @@ class ObRController extends Controller
                 fputcsv($file, $columns); 
 
                 foreach ($obrs as $obr) {
-                    // Safe Fallbacks to prevent 500 errors on missing dates
+                    // Time Received (Start)
                     $start = $obr->created_at ? \Carbon\Carbon::parse($obr->created_at) : now();
-                    $pc1_done = $obr->pc1_time_out ? \Carbon\Carbon::parse($obr->pc1_time_out) : $start; 
-                    $pc2_done = $obr->pc2_time_out ? \Carbon\Carbon::parse($obr->pc2_time_out) : $pc1_done;
-                    $pc3_start = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : $pc2_done;
                     
-                    // THE FIX: Grabs the exact moment PC1 finalized the release
+                    // THE FIX 2: Format to exact clock time (e.g. "01:45 PM") instead of minutes
+                    $pc1_done_time = $obr->pc1_time_out ? \Carbon\Carbon::parse($obr->pc1_time_out)->format('h:i A') : 'N/A';
+                    $pc2_done_time = $obr->pc2_time_out ? \Carbon\Carbon::parse($obr->pc2_time_out)->format('h:i A') : 'N/A';
+                    
+                    // Final Release Time
+                    $pc3_start = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : $start;
                     $final_done = $obr->pc1_final_release ? \Carbon\Carbon::parse($obr->pc1_final_release) : ($obr->updated_at ? \Carbon\Carbon::parse($obr->updated_at) : $pc3_start);
 
-                    $pc1_mins = max(0, $start->diffInSeconds($pc1_done) / 60);
-                    $pc2_mins = max(0, $pc1_done->diffInSeconds($pc2_done) / 60);
+                    // We still calculate the grand total duration for the very last column
                     $total_system_mins = max(0, $start->diffInSeconds($final_done) / 60);
 
                     fputcsv($file, [
                         $obr->obr_date ? \Carbon\Carbon::parse($obr->obr_date)->format('M d, Y') : 'N/A', 
                         $start->format('h:i A'), 
                         $obr->obr_number ?? 'N/A', 
-                        $formatTime($pc1_mins), 
+                        $pc1_done_time, // Replaced duration with clock time
                         $obr->analyze_control_data ?? 'N/A', 
-                        $formatTime($pc2_mins), 
+                        $pc2_done_time, // Replaced duration with clock time
                         $obr->pc3_signatory ?? 'N/A', 
-                        // THE FIX: Replaced duration with the exact timestamp
-                        $final_done->format('h:i A'), 
+                        $final_done->format('h:i A'), // Final clock time
                         $formatTime($total_system_mins), 
                         $obr->pc3_remarks ?? 'None' 
                     ]);
@@ -195,7 +205,7 @@ class ObRController extends Controller
                 fclose($file);
             };
 
-            // StreamDownload is the correct, safe way to export without crashing the page
+            // StreamDownload prevents freezing buttons and crashing headers
             return response()->streamDownload($callback, $filename, [
                 "Content-type"        => "text/csv",
                 "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
