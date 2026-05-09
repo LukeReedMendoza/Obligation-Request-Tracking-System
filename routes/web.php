@@ -33,4 +33,13 @@ use App\Events\PingEvent;
 Route::get('/send-ping', function () {
     PingEvent::dispatch("Hello PC 2! The Budget Office Radar is online!");
     return "Ping successfully fired into the network!";
+}); // <-- THIS WAS MISSING!
+
+// THE SILENT POLLER BACKEND: Returns the latest activity timestamp
+Route::get('/obr-pulse', function () {
+    // Looks at the database and returns the exact time the last document was touched
+    $latest = \App\Models\ObligationRequest::max('updated_at');
+    
+    // Returns it as plain text to the browser
+    return response($latest ?? '0');
 });

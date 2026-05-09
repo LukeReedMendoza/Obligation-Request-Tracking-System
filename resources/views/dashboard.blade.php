@@ -1,16 +1,52 @@
 @extends('layouts.app')
 
 @section('content')
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="{{ asset('flatpickr.min.css') }}">
     <style>
-        /* Customizing Flatpickr to match your Emerald/Teal theme */
-        .flatpickr-day.selected { background: #10b981 !important; border-color: #10b981 !important; }
-        .flatpickr-calendar { border-radius: 1.5rem !important; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1) !拍; border: none !important; padding: 10px; }
+        /* MODERN EMERALD THEME */
+        .flatpickr-calendar { 
+            background: #ffffff !important;
+            border-radius: 1.5rem !important; 
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2) !important; 
+            border: 1px solid #e2e8f0 !important;
+            padding: -10px;
+            z-index: 99999 !important;
+        }
+        .flatpickr-day.selected, .flatpickr-day.selected:hover { 
+            background: #059669 !important; 
+            border-color: #059669 !important; 
+            color: white !important;
+            font-weight: 800 !important;
+            border-radius: 12px !important;
+        }
+        .flatpickr-day.today {
+            border-color: #10b981 !important; 
+            color: #065f46 !important;
+            font-weight: 900 !important;
+            background: #ecfdf5 !important;
+        }
+        .flatpickr-day.today:hover { background: #d1fae5 !important; }
+        .flatpickr-months .flatpickr-month { color: #1e293b !important; font-weight: 800 !important; }
+        .flatpickr-weekday { color: #94a3b8 !important; font-weight: 700 !important; text-transform: uppercase; font-size: 10px !important; }
     </style>
 
     @if(session('success'))
         <div class="mb-6 px-4 py-3 bg-green-100 text-green-800 rounded-lg w-full max-w-4xl font-medium text-center shadow-sm">
             {{ session('success') }}
+        </div>
+    @endif
+
+    @if($errors->any())
+        <div class="mb-6 px-4 py-3 bg-red-100 text-red-800 border-2 border-red-200 rounded-lg w-full max-w-4xl font-medium shadow-sm">
+            <div class="flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                <span><strong>Entry Failed:</strong> Please fix the errors below.</span>
+            </div>
+            <ul class="mt-2 text-sm list-disc list-inside text-left w-fit mx-auto">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
         </div>
     @endif
 
@@ -71,13 +107,13 @@
                 <form action="{{ route('obr.export') }}" method="GET" class="flex items-center gap-1 bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
                     <div class="flex items-center bg-slate-50 rounded-xl px-3 py-1 border border-transparent focus-within:border-emerald-500 transition-all">
                         <span class="text-[9px] font-black text-slate-400 uppercase tracking-tighter mr-2">From</span>
-                        <input type="text" id="start_date" name="start_date" placeholder="Select Date" required 
+                        <input type="text" id="start_date" name="start_date" placeholder="Select Date" 
                                class="text-xs bg-transparent border-none focus:ring-0 p-1 w-24 text-slate-700 font-bold cursor-pointer">
                     </div>
                     
                     <div class="flex items-center bg-slate-50 rounded-xl px-3 py-1 border border-transparent focus-within:border-emerald-500 transition-all">
                         <span class="text-[9px] font-black text-slate-400 uppercase tracking-tighter mr-2">To</span>
-                        <input type="text" id="end_date" name="end_date" placeholder="Select Date" required 
+                        <input type="text" id="end_date" name="end_date" placeholder="Select Date" 
                                class="text-xs bg-transparent border-none focus:ring-0 p-1 w-24 text-slate-700 font-bold cursor-pointer">
                     </div>
 
@@ -199,38 +235,93 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script>
-        const currentRole = "{{ strtolower($role) }}";
+    <div id="overrideModal" class="fixed inset-0 z-[150] hidden flex items-start justify-center pt-60 p-4">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-xl" onclick="closeOverrideModal()"></div>
+        <div class="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden transform transition-all">
+            <div class="bg-red-700 p-8 text-center text-white relative">
+                <img src="{{ asset('3DMunicipalLogo.ico') }}" alt="Seal" class="w-20 h-20 mx-auto mb-4 object-contain">
+                <h3 class="text-xl font-black uppercase tracking-tight">Official Authorization</h3>
+                <p class="text-red-100 text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">PC 3 Control</p>
+            </div>
+            <div class="p-8 text-center">
+                <p class="text-slate-500 font-bold leading-relaxed text-base">You are bypassing the <span class="text-slate-900 font-black italic">FIFO</span> protocol.</p>
+                <div class="h-px w-12 bg-slate-100 mx-auto my-5"></div>
+                <p class="text-red-700 font-black text-xs uppercase tracking-widest italic">"Is this a priority?"</p>
+            </div>
+            <div class="flex flex-col p-6 bg-slate-50/80 gap-3">
+                <button onclick="confirmOverride()" class="w-full bg-red-700 hover:bg-red-800 text-white font-black py-4 rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-xs">Authorize</button>
+                <button onclick="closeOverrideModal()" class="w-full bg-transparent text-slate-400 font-bold py-2 text-[9px] uppercase tracking-widest">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-        // Initialize modern date pickers
+    <script src="{{ asset('flatpickr.min.js') }}"></script>
+    <script>
         document.addEventListener("DOMContentLoaded", () => {
-            flatpickr("#start_date", {
-                dateFormat: "Y-m-d",
-                altInput: true,
-                altFormat: "M j, Y", // Looks premium like: May 8, 2026
-                disableMobile: "true"
-            });
-            flatpickr("#end_date", {
+            const currentRole = "{{ strtolower($role) }}";
+            
+            // Editor Fix: converts Blade Boolean to standard JS String check
+            const hasErrors = "{{ $errors->any() ? 'true' : 'false' }}" === 'true';
+            if (hasErrors) { toggleModal('obrModal'); }
+
+            const fpConfig = {
                 dateFormat: "Y-m-d",
                 altInput: true,
                 altFormat: "M j, Y",
-                disableMobile: "true"
-            });
+                disableMobile: "true",
+                animate: true,
+                maxDate: "today",
+                static: false,
+                appendTo: document.body
+            };
+
+            flatpickr("#start_date", fpConfig);
+            flatpickr("#end_date", fpConfig);
             
-            // Standard sorting and queue logic
+            // Initial sort
             const container = document.getElementById('obr-container');
             const cards = Array.from(container.querySelectorAll('.obr-card'));
             cards.sort((a, b) => parseInt(a.getAttribute('data-timestamp')) - parseInt(b.getAttribute('data-timestamp')));
             cards.forEach(card => container.appendChild(card));
             if (currentRole === 'pc3') applyQueueLogic();
+
+            // Auto-Refresh Logic
+            let lastPulse = null;
+            function checkForUpdates() {
+                fetch("{{ url('/obr-pulse') }}")
+                    .then(response => response.text())
+                    .then(currentPulse => {
+                        if (lastPulse === null) { lastPulse = currentPulse; } 
+                        else if (currentPulse !== lastPulse && currentPulse !== "0") {
+                            lastPulse = currentPulse; 
+                            fetch(window.location.href)
+                                .then(response => response.text())
+                                .then(html => {
+                                    const parser = new DOMParser();
+                                    const newDoc = parser.parseFromString(html, "text/html");
+                                    document.getElementById('obr-container').innerHTML = newDoc.getElementById('obr-container').innerHTML;
+                                    
+                                    const newContainer = document.getElementById('obr-container');
+                                    const newCards = Array.from(newContainer.querySelectorAll('.obr-card'));
+                                    newCards.sort((a, b) => parseInt(a.getAttribute('data-timestamp')) - parseInt(b.getAttribute('data-timestamp')));
+                                    newCards.forEach(card => newContainer.appendChild(card));
+                                    
+                                    if (currentRole === 'pc3') applyQueueLogic();
+                                });
+                        }
+                    });
+            }
+            setInterval(checkForUpdates, 2000);
         });
 
         function toggleModal(modalId) {
             const modal = document.getElementById(modalId);
-            modal.classList.toggle('hidden');
-            if (!modal.classList.contains('hidden')) {
-                document.getElementById('obr_input').focus();
+            if(modal) {
+                modal.classList.toggle('hidden');
+                if (!modal.classList.contains('hidden')) { 
+                    const input = document.getElementById('obr_input');
+                    if(input) input.focus(); 
+                }
             }
         }
 
@@ -241,21 +332,22 @@
                 const obrNumber = card.getAttribute('data-obr');
                 card.style.display = obrNumber.includes(searchTerm) ? 'flex' : 'none';
             });
-            if (currentRole === 'pc3') applyQueueLogic();
+            if ("{{ strtolower($role) }}" === 'pc3') applyQueueLogic();
         });
 
         function applyQueueLogic() {
-            if (currentRole !== 'pc3') return;
+            if ("{{ strtolower($role) }}" !== 'pc3') return;
             const container = document.getElementById('obr-container');
-            const cards = Array.from(container.querySelectorAll('.obr-card'))
-                               .filter(card => card.style.display !== 'none');
+            const cards = Array.from(container.querySelectorAll('.obr-card')).filter(card => card.style.display !== 'none');
             let foundFirstActionable = false;
+            
             cards.forEach((card) => {
                 const cardBody = card.querySelector('.card-body');
                 const normalActions = card.querySelector('.normal-actions');
                 const overrideActions = card.querySelector('.override-actions');
                 const status = card.getAttribute('data-status');
                 const isWaitingForPc3 = (status === 'in_transit' || status === 'pending_final_review');
+                
                 if (isWaitingForPc3) {
                     if (!foundFirstActionable) {
                         foundFirstActionable = true;
@@ -282,14 +374,13 @@
             });
         }
 
+        let pendingUnlockCard = null;
         function unlockCard(btn) {
             pendingUnlockCard = btn.closest('.obr-card');
             document.getElementById('overrideModal').classList.remove('hidden');
         }
 
-        function closeOverrideModal() {
-            document.getElementById('overrideModal').classList.add('hidden');
-        }
+        function closeOverrideModal() { document.getElementById('overrideModal').classList.add('hidden'); }
 
         function confirmOverride() {
             if (pendingUnlockCard) {
@@ -302,31 +393,21 @@
                 closeOverrideModal();
             }
         }
-    </script>
 
-    <script type="module">
-        if (window.Echo) {
-            window.Echo.channel('office-network').listen('ObrMoved', (e) => window.location.reload());
-        }
-    </script>
+        document.addEventListener('submit', function(e) {
+            // THE FIX: Ignore GET requests like the Export form so the button doesn't freeze
+            if (e.target.method && e.target.method.toUpperCase() === 'GET') {
+                return;
+            }
 
-    <div id="overrideModal" class="fixed inset-0 z-[150] hidden flex items-start justify-center pt-60 p-4">
-        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-xl" onclick="closeOverrideModal()"></div>
-        <div class="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden transform transition-all">
-            <div class="bg-red-700 p-8 text-center text-white relative">
-                <img src="{{ asset('3DMunicipalLogo.ico') }}" alt="Seal" class="w-20 h-20 mx-auto mb-4 object-contain">
-                <h3 class="text-xl font-black uppercase tracking-tight">Official Authorization</h3>
-                <p class="text-red-100 text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">PC 3 Control</p>
-            </div>
-            <div class="p-8 text-center">
-                <p class="text-slate-500 font-bold leading-relaxed text-base">You are bypassing the <span class="text-slate-900 font-black italic">FIFO</span> protocol.</p>
-                <div class="h-px w-12 bg-slate-100 mx-auto my-5"></div>
-                <p class="text-red-700 font-black text-xs uppercase tracking-widest italic">"Is this a priority?"</p>
-            </div>
-            <div class="flex flex-col p-6 bg-slate-50/80 gap-3">
-                <button onclick="confirmOverride()" class="w-full bg-red-700 hover:bg-red-800 text-white font-black py-4 rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-xs">Authorize</button>
-                <button onclick="closeOverrideModal()" class="w-full bg-transparent text-slate-400 font-bold py-2 text-[9px] uppercase tracking-widest">Cancel</button>
-            </div>
-        </div>
-    </div>
+            const submitBtn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('button:not([type="button"])');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                if(!submitBtn.querySelector('svg') && !submitBtn.querySelector('span')) {
+                    submitBtn.innerText = 'Processing...';
+                }
+            }
+        });
+    </script>
 @endsection

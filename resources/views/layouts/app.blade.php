@@ -7,7 +7,7 @@
 
     <link rel="stylesheet" href="{{ asset('build/assets/app-CyPD0-iE.css') }}?v=OFFLINE">
 
-    <script src="{{ asset('build/assets/app-a6NN0lTC.js') }}?v=RADAR_ONLINE" defer></script>
+    <script src="{{ asset('build/assets/app-34mOoJaZ.js') }}?v=RADAR_ONLINE" defer></script>
 </head>
 <body class="bg-slate-50 font-sans text-slate-900 antialiased h-screen overflow-hidden flex flex-col relative">
 

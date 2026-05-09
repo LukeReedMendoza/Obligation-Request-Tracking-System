@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ObligationRequest;
 use Illuminate\Http\Request;
-use App\Events\ObrMoved; 
-
 
 class ObRController extends Controller
 {
@@ -27,6 +25,7 @@ class ObRController extends Controller
 
         return view('dashboard', compact('requests', 'role', 'todayCompleted'));
     }
+
     public function store(Request $request)
     {
         $request->validate([
@@ -47,12 +46,13 @@ class ObRController extends Controller
     // PC 1 physically passes the paper to PC 2
     public function pc1Release($id) 
     {
-        $obr = ObligationRequest::findOrFail($id);
+        $obr = ObligationRequest::find($id); // Safety Net
+        if (!$obr) return back(); 
+
         $obr->update([
             'status' => 'processing',
-            'pc1_time_out' => now(), // THE STOPWATCH FOR PC 1
+            'pc1_time_out' => now(), 
         ]);
-        ObrMoved::dispatch();
 
         return back()->with('success', 'ObR sent to PC 2!');
     }
@@ -60,13 +60,14 @@ class ObRController extends Controller
     // PC 2 finishes analyzing and passes it to PC 3
     public function pc2Process(Request $request, $id) 
     {
-        $obr = ObligationRequest::findOrFail($id);
+        $obr = ObligationRequest::find($id); // Safety Net
+        if (!$obr) return back(); 
+
         $obr->update([
             'status' => 'in_transit',
             'analyze_control_data' => $request->analyze_control_data,
-            'pc2_time_out' => now(), // THE STOPWATCH FOR PC 2
+            'pc2_time_out' => now(), 
         ]);
-        ObrMoved::dispatch();
 
         return back()->with('success', 'Processing done! Sent to PC 3.');
     }
@@ -74,143 +75,136 @@ class ObRController extends Controller
     // PC 3 officially receives the paper on their desk
     public function pc3Receive($id)
     {
-        $obr = ObligationRequest::findOrFail($id);
+        $obr = ObligationRequest::find($id); // Safety Net
+        if (!$obr) return back(); 
+
         $obr->update([
             'status' => 'pending_final_review', 
             'pc3_time_in' => now(), 
         ]);
         
-        event(new ObrMoved()); 
         return redirect()->back();
     }
 
     // PC 3 finishes and returns it to PC 1
     public function pc3Release(Request $request, $id)
     {
-        $obr = ObligationRequest::findOrFail($id);
+        $obr = ObligationRequest::find($id); // Safety Net
+        if (!$obr) return back(); 
+
         $obr->update([
             'status' => 'ready_for_release',
             'pc3_remarks' => $request->pc3_remarks,
-            'pc3_signatory' => $request->pc3_signatory, // <-- FIXED: IT NOW CATCHES THE DROPDOWN
+            'pc3_signatory' => $request->pc3_signatory, 
             'pc3_time_out' => now() 
         ]);
-        ObrMoved::dispatch();
 
         return back()->with('success', 'Finalized! Returned to PC 1.');
     }
 
    public function finalRelease($id)
     {
-        $obr = ObligationRequest::findOrFail($id);
+        $obr = ObligationRequest::find($id); // Safety Net
+        if (!$obr) return back(); 
         
-        // 1. Capture the exact finish time
         $finishTime = now();
         
-        // 2. AUTO-CALCULATION: Figure out the total minutes
-        $startTime = \Carbon\Carbon::parse($obr->pc1_time_in);
+        // AUTO-CALCULATION
+        $startTime = $obr->pc1_time_in ? \Carbon\Carbon::parse($obr->pc1_time_in) : $obr->created_at;
         $totalMinutes = $startTime->diffInMinutes($finishTime);
         
-        // 3. Save everything permanently to the database
         $obr->update([
             'status' => 'completed',
             'pc1_final_release' => $finishTime, 
             'total_minutes' => $totalMinutes 
         ]);
-        ObrMoved::dispatch();
 
         return back()->with('success', 'ObR Officially Completed and Time Calculated!');
     }
 
-    public function exportReport(Request $request) // <-- ADDED REQUEST HERE
+    public function exportReport(Request $request) 
     {
-        // 1. Start the query for completed ObRs
-        $query = ObligationRequest::where('status', 'completed')
-                                  ->orderBy('created_at', 'desc');
+        try {
+            $query = ObligationRequest::where('status', 'completed')
+                                      ->orderBy('created_at', 'desc');
 
-        // 2. Apply the Date Filter if the user selected dates!
-        if ($request->filled('start_date') && $request->filled('end_date')) {
-            // We use startOfDay() and endOfDay() to capture the entire 24 hours of both days
-            $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
-            $end = \Carbon\Carbon::parse($request->end_date)->endOfDay();
-            
-            // Filter by the exact time the document was completely finalized
-            $query->whereBetween('pc1_final_release', [$start, $end]);
-        }
-
-        // 3. Actually run the query to get the results
-        $obrs = $query->get();
-
-        // 4. Update the filename to show the requested date range
-        $fileDateInfo = $request->filled('start_date') 
-            ? "_{$request->start_date}_to_{$request->end_date}" 
-            : "_" . date('Y-m-d');
-            
-        $filename = "ObR_Report" . $fileDateInfo . ".csv";
-
-        $headers = [
-            "Content-type"        => "text/csv",
-            "Content-Disposition" => "attachment; filename=$filename",
-            "Pragma"              => "no-cache",
-            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
-            "Expires"             => "0"
-        ];
-
-        $columns = [
-            'Date',                      
-            'Time Received',             
-            'ObR No.',                   
-            'Time',                      
-            'Analyze and Control',       
-            'Time',                      
-            'Checked and Clarified by:', 
-            'Time Release',              
-            'Total Time',                
-            'Remarks'                    
-        ];
-
-        $formatTime = function($mins) {
-            $mins = (int) round($mins); 
-            
-            if ($mins <= 0) return "< 1 min";
-            if ($mins < 60) return "{$mins} mins";
-            $hrs = floor($mins / 60);
-            $rem_mins = $mins % 60;
-            return "{$hrs} hr " . ($rem_mins > 0 ? "{$rem_mins} mins" : "");
-        };
-
-        $callback = function() use($obrs, $columns, $formatTime) {
-            $file = fopen('php://output', 'w');
-            fputcsv($file, $columns); 
-
-            foreach ($obrs as $obr) {
-                $start = $obr->created_at;
-                $pc1_done = $obr->pc1_time_out ? \Carbon\Carbon::parse($obr->pc1_time_out) : $start; 
-                $pc2_done = $obr->pc2_time_out ? \Carbon\Carbon::parse($obr->pc2_time_out) : $pc1_done;
-                $pc3_start = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : $pc2_done;
-                $final_done = $obr->updated_at;
-
-                $pc1_mins = $start->diffInSeconds($pc1_done) / 60;
-                $pc2_mins = $pc1_done->diffInSeconds($pc2_done) / 60;
-                $pc3_total_mins = $pc3_start->diffInSeconds($final_done) / 60;
-                $total_system_mins = $start->diffInSeconds($final_done) / 60;
-
-                fputcsv($file, [
-                    $obr->obr_date ? \Carbon\Carbon::parse($obr->obr_date)->format('M d, Y') : 'N/A', 
-                    $start->format('h:i A'), 
-                    $obr->obr_number, 
-                    $formatTime($pc1_mins), 
-                    $obr->analyze_control_data ?? 'N/A', 
-                    $formatTime($pc2_mins), 
-                    $obr->pc3_signatory ?? 'N/A', 
-                    $formatTime($pc3_total_mins), 
-                    $formatTime($total_system_mins), 
-                    $obr->pc3_remarks ?? 'None' 
-                ]);
+            if ($request->filled('start_date') && $request->filled('end_date')) {
+                $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
+                $end = \Carbon\Carbon::parse($request->end_date)->endOfDay();
+                
+                $query->whereBetween('pc1_final_release', [$start, $end]);
             }
-            fclose($file);
-        };
 
-        return response()->stream($callback, 200, $headers);
+            $obrs = $query->get();
+
+            $fileDateInfo = $request->filled('start_date') 
+                ? "_{$request->start_date}_to_{$request->end_date}" 
+                : "_" . date('Y-m-d');
+                
+            $filename = "ObR_Report" . $fileDateInfo . ".csv";
+
+            $columns = [
+                'Date', 'Time Received', 'ObR No.', 'Time', 'Analyze and Control', 
+                'Time', 'Checked and Clarified by:', 'Time Release', 'Total Time', 'Remarks'                    
+            ];
+
+            $formatTime = function($mins) {
+                $mins = (int) round($mins); 
+                if ($mins <= 0) return "< 1 min";
+                if ($mins < 60) return "{$mins} mins";
+                $hrs = floor($mins / 60);
+                $rem_mins = $mins % 60;
+                return "{$hrs} hr " . ($rem_mins > 0 ? "{$rem_mins} mins" : "");
+            };
+
+            $callback = function() use($obrs, $columns, $formatTime) {
+                $file = fopen('php://output', 'w');
+                
+                // BOM Fix for proper MS Excel rendering
+                fputs($file, $bom =(chr(0xEF) . chr(0xBB) . chr(0xBF))); 
+                fputcsv($file, $columns); 
+
+                foreach ($obrs as $obr) {
+                    // Safe Fallbacks to prevent 500 errors on missing dates
+                    $start = $obr->created_at ? \Carbon\Carbon::parse($obr->created_at) : now();
+                    $pc1_done = $obr->pc1_time_out ? \Carbon\Carbon::parse($obr->pc1_time_out) : $start; 
+                    $pc2_done = $obr->pc2_time_out ? \Carbon\Carbon::parse($obr->pc2_time_out) : $pc1_done;
+                    $pc3_start = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : $pc2_done;
+                    
+                    // THE FIX: Grabs the exact moment PC1 finalized the release
+                    $final_done = $obr->pc1_final_release ? \Carbon\Carbon::parse($obr->pc1_final_release) : ($obr->updated_at ? \Carbon\Carbon::parse($obr->updated_at) : $pc3_start);
+
+                    $pc1_mins = max(0, $start->diffInSeconds($pc1_done) / 60);
+                    $pc2_mins = max(0, $pc1_done->diffInSeconds($pc2_done) / 60);
+                    $total_system_mins = max(0, $start->diffInSeconds($final_done) / 60);
+
+                    fputcsv($file, [
+                        $obr->obr_date ? \Carbon\Carbon::parse($obr->obr_date)->format('M d, Y') : 'N/A', 
+                        $start->format('h:i A'), 
+                        $obr->obr_number ?? 'N/A', 
+                        $formatTime($pc1_mins), 
+                        $obr->analyze_control_data ?? 'N/A', 
+                        $formatTime($pc2_mins), 
+                        $obr->pc3_signatory ?? 'N/A', 
+                        // THE FIX: Replaced duration with the exact timestamp
+                        $final_done->format('h:i A'), 
+                        $formatTime($total_system_mins), 
+                        $obr->pc3_remarks ?? 'None' 
+                    ]);
+                }
+                fclose($file);
+            };
+
+            // StreamDownload is the correct, safe way to export without crashing the page
+            return response()->streamDownload($callback, $filename, [
+                "Content-type"        => "text/csv",
+                "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+                "Expires"             => "0"
+            ]);
+
+        } catch (\Exception $e) {
+            // Safety Net: Bounces the user safely back if an error occurs
+            return redirect()->back()->withErrors('Export Error: ' . $e->getMessage());
+        }
     }
-
 }
