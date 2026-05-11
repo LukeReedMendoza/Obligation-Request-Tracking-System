@@ -50,6 +50,36 @@
         </div>
     @endif
 
+    <div id="offlineOverlay" class="fixed inset-0 z-[9999] hidden flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm transition-all duration-300">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-md w-full border border-rose-100">
+            <div class="mx-auto h-20 w-20 bg-rose-50 rounded-full flex items-center justify-center mb-6">
+                <svg class="h-10 w-10 text-rose-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414"></path>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-black text-slate-800 mb-2 tracking-tight">Connection Lost</h2>
+            <p class="text-slate-500 text-sm font-medium mb-8 leading-relaxed">
+                We temporarily lost connection to the PC 1 Server. Please ensure the main computer is turned on and connected to the network.
+            </p>
+            <div class="flex items-center justify-center gap-3 text-rose-600 font-bold bg-rose-50 py-3 px-4 rounded-xl">
+                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Attempting to reconnect...
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full max-w-7xl mx-auto mb-6 flex justify-start">
+        <a href="{{ url('/') }}" class="inline-flex items-center px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all active:scale-95 gap-2 group">
+            <svg class="w-4 h-4 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+            Main Menu
+        </a>
+    </div>
+
     @if($role == 'pc1')
     <div class="w-full max-w-4xl bg-white rounded-2xl shadow-lg border border-slate-100 p-12 mb-10 text-center">
         <h2 class="text-3xl font-black text-slate-800 mb-2">New Entry Station</h2>
@@ -118,7 +148,7 @@
                     </div>
 
                     <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-md shadow-emerald-200 transition-all active:scale-95 flex items-center gap-2">
-                        <span>📊</span> Export
+                        <span></span> Export
                     </button>
                 </form>
 
@@ -129,7 +159,7 @@
         </div>
 
         <div class="mb-12 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 max-w-2xl mx-auto">
-            <input type="text" id="searchInput" placeholder="🔍 Search ObR Number (e.g., 2026-001)..." 
+            <input type="text" id="searchInput" placeholder="Search ObR Number (e.g., 2026-001)..." 
                    class="w-full px-6 py-4 rounded-xl border-none bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all font-bold text-slate-700 text-center text-lg">
         </div>
         
@@ -164,7 +194,7 @@
                     <div class="w-full relative">
                         <div class="override-actions hidden w-full">
                             <button type="button" onclick="unlockCard(this)" class="w-full bg-slate-800 hover:bg-rose-600 text-white font-black py-4 rounded-xl shadow-lg transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2">
-                                <span>🔒</span> Queued (Click to Override)
+                                <span>白</span> Queued (Click to Override)
                             </button>
                         </div>
 
@@ -285,11 +315,16 @@
             cards.forEach(card => container.appendChild(card));
             if (currentRole === 'pc3') applyQueueLogic();
 
-            // Auto-Refresh Logic
+            // Auto-Refresh & Heartbeat Logic
             let lastPulse = null;
             function checkForUpdates() {
                 fetch("{{ url('/obr-pulse') }}")
-                    .then(response => response.text())
+                    .then(response => {
+                        if (!response.ok) throw new Error("Server disconnected");
+                        // Connection is good! Hide the offline screen.
+                        document.getElementById('offlineOverlay').classList.add('hidden');
+                        return response.text();
+                    })
                     .then(currentPulse => {
                         if (lastPulse === null) { lastPulse = currentPulse; } 
                         else if (currentPulse !== lastPulse && currentPulse !== "0") {
@@ -309,6 +344,10 @@
                                     if (currentRole === 'pc3') applyQueueLogic();
                                 });
                         }
+                    })
+                    .catch(error => {
+                        // The ping failed! Show the safety shield to prevent clicks.
+                        document.getElementById('offlineOverlay').classList.remove('hidden');
                     });
             }
             setInterval(checkForUpdates, 2000);
