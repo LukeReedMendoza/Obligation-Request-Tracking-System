@@ -18,20 +18,24 @@ return new class extends Migration
             $table->timestamp('pc1_time_out')->nullable(); 
             
             // PC 2
-            $table->text('analyze_control_data')->nullable();
+            $table->string('analyze_control_data')->nullable();
             $table->timestamp('pc2_time_out')->nullable();
             
             // PC 3
             $table->timestamp('pc3_time_in')->nullable();
+            $table->string('pc3_signatory')->nullable();
             $table->text('pc3_remarks')->nullable();
             $table->timestamp('pc3_time_out')->nullable();
             
             // PC 1 Final
             $table->timestamp('pc1_final_release')->nullable();
             
-            // Tracking State
+            // ADDED: Required for the final calculation in the Controller
+            $table->decimal('total_minutes', 8, 2)->nullable();
+            
+            // FIXED: 'final_boss' changed to 'pending_final_review' to match controller
             $table->enum('status', [
-                'entry', 'processing', 'in_transit', 'final_boss', 'ready_for_release', 'completed'
+                'entry', 'processing', 'in_transit', 'pending_final_review', 'ready_for_release', 'completed'
             ])->default('entry');
             
             $table->timestamps();

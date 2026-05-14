@@ -144,7 +144,7 @@ class ObRController extends Controller
         return back()->with('success', 'ObR Officially Completed and Time Calculated!');
     }
 
-    public function exportReport(Request $request) 
+   public function exportReport(Request $request) 
     {
         try {
             $query = ObligationRequest::where('status', 'completed')
@@ -165,21 +165,21 @@ class ObRController extends Controller
                 
             $filename = "ObR_Report" . $fileDateInfo . ".csv";
 
-            // THE FIX 1: Clearer Column Headers for the Excel file
+            // UPDATED: Columns arranged exactly in the requested order
             $columns = [
                 'Date', 
                 'Time Received', 
                 'ObR No.', 
-                'Time', 
+                'Process 1 Duration',
+                'Time (PC 1 Done)', 
                 'Analyze and Control', 
-                'Time', 
-                'Checked and Clarified by:', 
+                'Process 2 Duration',             // <--- Make sure this comma is here!
+                'Checked and Clarified by', 
+                'Process 3 Duration',
                 'Time Released', 
-                'Total Time', 
                 'Remarks'                    
             ];
 
-            // Formatter for the very last column (Total Duration)
             $formatTime = function($mins) {
                 $mins = (int) round($mins); 
                 if ($mins <= 0) return "< 1 min";
@@ -192,42 +192,45 @@ class ObRController extends Controller
             $callback = function() use($obrs, $columns, $formatTime) {
                 $file = fopen('php://output', 'w');
                 
-                // BOM Fix for proper MS Excel rendering
                 fputs($file, $bom =(chr(0xEF) . chr(0xBB) . chr(0xBF))); 
                 fputcsv($file, $columns); 
 
                 foreach ($obrs as $obr) {
-                    // Time Received (Start)
+                    // Time Parsing
                     $start = $obr->created_at ? \Carbon\Carbon::parse($obr->created_at) : now();
-                    
-                    // THE FIX 2: Format to exact clock time (e.g. "01:45 PM") instead of minutes
-                    $pc1_done_time = $obr->pc1_time_out ? \Carbon\Carbon::parse($obr->pc1_time_out)->format('h:i A') : 'N/A';
-                    $pc2_done_time = $obr->pc2_time_out ? \Carbon\Carbon::parse($obr->pc2_time_out)->format('h:i A') : 'N/A';
-                    
-                    // Final Release Time
-                    $pc3_start = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : $start;
-                    $final_done = $obr->pc1_final_release ? \Carbon\Carbon::parse($obr->pc1_final_release) : ($obr->updated_at ? \Carbon\Carbon::parse($obr->updated_at) : $pc3_start);
+                    $pc1_in = $obr->pc1_time_in ? \Carbon\Carbon::parse($obr->pc1_time_in) : $start;
+                    $pc1_out = $obr->pc1_time_out ? \Carbon\Carbon::parse($obr->pc1_time_out) : null;
+                    $pc2_out = $obr->pc2_time_out ? \Carbon\Carbon::parse($obr->pc2_time_out) : null;
+                    $pc3_in = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : null;
+                    $pc3_out = $obr->pc3_time_out ? \Carbon\Carbon::parse($obr->pc3_time_out) : null;
+                    $final_done = $obr->pc1_final_release ? \Carbon\Carbon::parse($obr->pc1_final_release) : ($obr->updated_at ? \Carbon\Carbon::parse($obr->updated_at) : ($pc3_out ?? $start));
 
-                    // Calculation for the duration column
-                    $total_system_mins = max(0, $start->diffInSeconds($final_done) / 60);
+                    // Individual PC Duration Calculations
+                    $pc1_duration = ($pc1_in && $pc1_out) ? $formatTime($pc1_in->diffInSeconds($pc1_out) / 60) : 'N/A';
+                    $pc2_duration = ($pc1_out && $pc2_out) ? $formatTime($pc1_out->diffInSeconds($pc2_out) / 60) : 'N/A';
+                    $pc3_duration = ($pc3_in && $pc3_out) ? $formatTime($pc3_in->diffInSeconds($pc3_out) / 60) : 'N/A';
 
+                    // Clock Time Formatting
+                    $pc1_done_time = $pc1_out ? $pc1_out->format('h:i A') : 'N/A';
+
+                    // Putting data exactly matching the column order
                     fputcsv($file, [
                         $obr->obr_date ? \Carbon\Carbon::parse($obr->obr_date)->format('M d, Y') : 'N/A', 
                         $start->format('h:i A'), 
                         $obr->obr_number ?? 'N/A', 
-                        $pc1_done_time, // Replaced duration with clock time
+                        $pc1_duration,
+                        $pc1_done_time, 
                         $obr->analyze_control_data ?? 'N/A', 
-                        $pc2_done_time, // Replaced duration with clock time
+                        $pc2_duration, 
                         $obr->pc3_signatory ?? 'N/A', 
-                        $final_done->format('h:i A'), // Final clock time
-                        $formatTime($total_system_mins), 
+                        $pc3_duration, 
+                        $final_done->format('h:i A'), 
                         $obr->pc3_remarks ?? 'None' 
                     ]);
                 }
                 fclose($file);
             };
 
-            // StreamDownload prevents freezing buttons and crashing headers
             return response()->streamDownload($callback, $filename, [
                 "Content-type"        => "text/csv",
                 "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
@@ -235,8 +238,7 @@ class ObRController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            // Safety Net: Bounces the user safely back if an error occurs
             return redirect()->back()->withErrors('Export Error: ' . $e->getMessage());
         }
     }
-}
+    }

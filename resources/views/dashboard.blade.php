@@ -210,7 +210,7 @@
                             @elseif($role == 'pc2' && $request->status == 'processing')
                                 <form action="{{ route('obr.pc2_process', $request->id) }}" method="POST" class="flex flex-col gap-3">
                                     @csrf @method('PATCH')
-                                    <textarea name="analyze_control_data" placeholder="Analyze & Control Data..." required class="w-full p-4 rounded-xl border border-slate-200 text-center outline-none focus:ring-2 focus:ring-amber-500 text-sm font-medium"></textarea>
+                                    <input type="text" name="analyze_control_data" class="form-control" placeholder="Optional notes...">
                                     <button class="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-4 rounded-xl shadow-lg transition-all active:scale-95">
                                         Done (Move to PC 3)
                                     </button>
@@ -227,11 +227,11 @@
                             @elseif($role == 'pc3' && $request->status == 'pending_final_review')
                                 <form action="{{ route('obr.pc3_release', $request->id) }}" method="POST" class="flex flex-col gap-3">
                                     @csrf @method('PATCH')
-                                    <select name="pc3_signatory" required class="w-full p-4 rounded-xl border border-slate-200 text-center outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-700 appearance-none cursor-pointer bg-slate-50">
-                                        <option value="" disabled selected>-- Checked and Clarified by: --</option>
-                                        <option value="Administrative Aide">Administrative Aide</option>
-                                        <option value="Administrative Officer">Administrative Officer</option>
-                                        <option value="Budget Officer">Budget Officer</option>
+                                    <select name="pc3_signatory" class="w-full border-gray-300 rounded-md shadow-sm">
+                                        <option value="">-- Select Signatory (Optional) --</option>
+                                        <option value="Sir Name 1">Sir Name 1</option>
+                                        <option value="Ma'am Name 2">Ma'am Name 2</option>
+                                        <option value="Engr. Name 3">Engr. Name 3</option>
                                     </select>
                                     <textarea name="pc3_remarks" placeholder="Optional Remarks..." class="w-full p-3 rounded-xl border border-slate-200 text-center outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-medium"></textarea>
                                     <button class="w-full bg-teal-600 hover:bg-teal-700 text-white font-black py-4 rounded-xl shadow-lg transition-all active:scale-95">
