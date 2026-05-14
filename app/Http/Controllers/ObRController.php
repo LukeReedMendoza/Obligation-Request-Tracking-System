@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ObligationRequest;
 use Illuminate\Http\Request;
+use App\Events\ObrMoved; // ADDED: For real-time updates
+use Carbon\Carbon;       // ADDED: For easier time handling
 
 class ObRController extends Controller
 {
@@ -33,12 +35,15 @@ class ObRController extends Controller
             'obr_date' => 'required|date',
         ]);
 
-        ObligationRequest::create([
+        $obr = ObligationRequest::create([
             'obr_number' => $request->obr_number,
             'obr_date' => $request->obr_date,
             'status' => 'entry',
             'pc1_time_in' => now(), 
         ]);
+
+        // ADDED: Updates PC 2 and PC 3 dashboards instantly
+        ObrMoved::dispatch($obr);
 
         return back()->with('success', 'ObR Logged Successfully!');
     }
@@ -53,6 +58,9 @@ class ObRController extends Controller
             'status' => 'processing',
             'pc1_time_out' => now(), 
         ]);
+
+        // ADDED: Updates PC 2 and PC 3 dashboards instantly
+        ObrMoved::dispatch($obr);
 
         return back()->with('success', 'ObR sent to PC 2!');
     }
@@ -69,6 +77,9 @@ class ObRController extends Controller
             'pc2_time_out' => now(), 
         ]);
 
+        // ADDED: Updates PC 2 and PC 3 dashboards instantly
+        ObrMoved::dispatch($obr);
+
         return back()->with('success', 'Processing done! Sent to PC 3.');
     }
 
@@ -83,6 +94,9 @@ class ObRController extends Controller
             'pc3_time_in' => now(), 
         ]);
         
+        // ADDED: Updates PC 2 and PC 3 dashboards instantly
+        ObrMoved::dispatch($obr);
+
         return redirect()->back();
     }
 
@@ -99,6 +113,9 @@ class ObRController extends Controller
             'pc3_time_out' => now() 
         ]);
 
+        // ADDED: Updates PC 2 and PC 3 dashboards instantly
+        ObrMoved::dispatch($obr);
+
         return back()->with('success', 'Finalized! Returned to PC 1.');
     }
 
@@ -111,13 +128,18 @@ class ObRController extends Controller
         
         // AUTO-CALCULATION
         $startTime = $obr->pc1_time_in ? \Carbon\Carbon::parse($obr->pc1_time_in) : $obr->created_at;
-        $totalMinutes = $startTime->diffInMinutes($finishTime);
+        
+        // ADDED: Fixed calculation to get accurate decimal minutes (e.g. 1.5 mins)
+        $totalMinutes = $startTime->diffInSeconds($finishTime) / 60;
         
         $obr->update([
             'status' => 'completed',
             'pc1_final_release' => $finishTime, 
             'total_minutes' => $totalMinutes 
         ]);
+
+        // ADDED: Updates PC 2 and PC 3 dashboards instantly
+        ObrMoved::dispatch($obr);
 
         return back()->with('success', 'ObR Officially Completed and Time Calculated!');
     }
@@ -186,7 +208,7 @@ class ObRController extends Controller
                     $pc3_start = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : $start;
                     $final_done = $obr->pc1_final_release ? \Carbon\Carbon::parse($obr->pc1_final_release) : ($obr->updated_at ? \Carbon\Carbon::parse($obr->updated_at) : $pc3_start);
 
-                    // We still calculate the grand total duration for the very last column
+                    // Calculation for the duration column
                     $total_system_mins = max(0, $start->diffInSeconds($final_done) / 60);
 
                     fputcsv($file, [
