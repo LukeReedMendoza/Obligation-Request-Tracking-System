@@ -143,10 +143,11 @@ class ObRController extends Controller
                 
             $filename = "ObR_Report" . $fileDateInfo . ".csv";
 
+            // FIXED: Updated column headers for Process durations
             $columns = [
-                'Date', 'Time Received', 'ObR No.', 'PC 1 Duration',
-                'Time (PC 1 Done)', 'Analyze and Control', 'PC 2 Duration',
-                'Checked and Clarified by', 'PC 3 Duration',
+                'Date', 'Time Received', 'ObR No.', 'Process 1 Duration',
+                'Time (PC 1 Done)', 'Analyze and Control', 'Process 2 Duration',
+                'Checked and Clarified by', 'Process 3 Duration',
                 'Time Released', 'Remarks'                    
             ];
 

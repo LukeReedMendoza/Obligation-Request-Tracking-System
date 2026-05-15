@@ -140,7 +140,7 @@
                     <div class="card-body text-center mb-6 w-full transition-all duration-300">
                         <div class="flex items-center justify-center gap-2 mb-1">
                             <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
-                            <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Reference No.</span>
+                            <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Obligation Request no.</span>
                         </div>
                         <h3 class="text-3xl font-black text-slate-900 leading-none mt-1">{{ $request->obr_number }}</h3>
                         <p class="text-sm font-bold text-slate-500 mt-2">Date: <span class="text-slate-700">{{ $request->obr_date?->format('M d, Y') }}</span></p>
@@ -344,7 +344,8 @@
                         if (failedAttempts >= 3) { document.getElementById('offlineOverlay').classList.remove('hidden'); }
                     });
             }
-            setInterval(checkForUpdates, 2000);
+            // CHANGED: Heartbeat slowed down to 3 seconds to reduce network traffic and slowness
+            setInterval(checkForUpdates, 3000); 
         });
 
         function toggleModal(modalId) {
@@ -358,34 +359,27 @@
             }
         }
 
-        // --- NEW PREVIEW MODAL JS FOR PC 4 ---
         function openPreviewModal(btn) {
             const card = btn.closest('.obr-card');
             const releaseUrl = btn.getAttribute('data-release-url');
 
-            // Pull data specifically for this document
             const obrNo = card.getAttribute('data-obr-raw');
             const date = card.getAttribute('data-date');
             const analyze = card.getAttribute('data-analyze');
             const signatory = card.getAttribute('data-signatory');
             const remarks = card.getAttribute('data-remarks');
 
-            // Inject the data into the popup form
             document.getElementById('preview-obr-number').innerText = obrNo;
             document.getElementById('preview-date').innerText = date;
             document.getElementById('preview-analyze').value = analyze || '';
             document.getElementById('preview-signatory').value = signatory || '';
             document.getElementById('preview-remarks').value = remarks || '';
 
-            // Set the form destination to this exact document
             document.getElementById('previewForm').action = releaseUrl;
-
-            // Show popup
             document.getElementById('previewModal').classList.remove('hidden');
         }
 
         function closePreviewModal() { document.getElementById('previewModal').classList.add('hidden'); }
-        // -------------------------------------
 
         document.getElementById('searchInput').addEventListener('input', function(e) {
             const searchTerm = e.target.value.toLowerCase();
@@ -464,12 +458,11 @@
             const submitBtn = form.querySelector('button[type="submit"]') || form.querySelector('button:not([type="button"])');
             const originalText = submitBtn ? submitBtn.innerHTML : '';
 
+            // FIXED: Instantly overwrite the button HTML so it visually locks and shows PROCESSING!
             if (submitBtn) {
                 submitBtn.disabled = true;
-                submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                if(!submitBtn.querySelector('svg') && !submitBtn.querySelector('span')) {
-                    submitBtn.innerText = 'Processing...';
-                }
+                submitBtn.classList.add('opacity-50', 'cursor-not-allowed', 'animate-pulse');
+                submitBtn.innerHTML = 'PROCESSING...';
             }
 
             const formData = new FormData(form);
@@ -507,15 +500,16 @@
                     if (dInput) dInput.value = new Date().toISOString().split('T')[0];
                 }
                 
-                // Make sure popup modals close when successfully submitted!
                 closeOverrideModal();
                 closePreviewModal();
             })
             .catch(error => {
                 console.error("Background network error:", error);
+                
+                // RESTORE BUTTON: If the network fails, it brings the button back
                 if (submitBtn) {
                     submitBtn.disabled = false;
-                    submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    submitBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'animate-pulse');
                     submitBtn.innerHTML = originalText;
                 }
             });
