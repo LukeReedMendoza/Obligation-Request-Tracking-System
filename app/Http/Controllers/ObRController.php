@@ -2,30 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\Auth;
 use App\Models\ObligationRequest;
 use Illuminate\Http\Request;
-use App\Events\ObrMoved; // ADDED: For real-time updates
-use Carbon\Carbon;       // ADDED: For easier time handling
+use App\Events\ObrMoved; 
+use Carbon\Carbon;       
 
 class ObRController extends Controller
 {
-  public function dashboard($role)
+    public function dashboard($role)
     {
-        // 1. THE SILENT LOGIN: Instantly logs them in based on the clicked step
-        if ($role === 'pc1') Auth::loginUsingId(1);
-        if ($role === 'pc2') Auth::loginUsingId(2);
-        if ($role === 'pc3') Auth::loginUsingId(3);
-
-        // 2. Get active requests
-        $requests = \App\Models\ObligationRequest::where('status', '!=', 'completed')->get();
-
-        // 3. The Daily Achievement Metric
-        $todayCompleted = \App\Models\ObligationRequest::where('status', 'completed')
-            ->whereDate('updated_at', \Carbon\Carbon::now('Asia/Manila')->toDateString())
-            ->count();
-
-        return view('dashboard', compact('requests', 'role', 'todayCompleted'));
+        $requests = ObligationRequest::where('status', '!=', 'completed')->get();
+        return view('dashboard', compact('requests', 'role'));
     }
 
     public function store(Request $request)
@@ -42,16 +29,14 @@ class ObRController extends Controller
             'pc1_time_in' => now(), 
         ]);
 
-        // ADDED: Updates PC 2 and PC 3 dashboards instantly
         ObrMoved::dispatch($obr);
 
         return back()->with('success', 'ObR Logged Successfully!');
     }
 
-    // PC 1 physically passes the paper to PC 2
     public function pc1Release($id) 
     {
-        $obr = ObligationRequest::find($id); // Safety Net
+        $obr = ObligationRequest::find($id); 
         if (!$obr) return back(); 
 
         $obr->update([
@@ -59,16 +44,14 @@ class ObRController extends Controller
             'pc1_time_out' => now(), 
         ]);
 
-        // ADDED: Updates PC 2 and PC 3 dashboards instantly
         ObrMoved::dispatch($obr);
 
         return back()->with('success', 'ObR sent to PC 2!');
     }
 
-    // PC 2 finishes analyzing and passes it to PC 3
     public function pc2Process(Request $request, $id) 
     {
-        $obr = ObligationRequest::find($id); // Safety Net
+        $obr = ObligationRequest::find($id); 
         if (!$obr) return back(); 
 
         $obr->update([
@@ -77,16 +60,14 @@ class ObRController extends Controller
             'pc2_time_out' => now(), 
         ]);
 
-        // ADDED: Updates PC 2 and PC 3 dashboards instantly
         ObrMoved::dispatch($obr);
 
         return back()->with('success', 'Processing done! Sent to PC 3.');
     }
 
-    // PC 3 officially receives the paper on their desk
     public function pc3Receive($id)
     {
-        $obr = ObligationRequest::find($id); // Safety Net
+        $obr = ObligationRequest::find($id); 
         if (!$obr) return back(); 
 
         $obr->update([
@@ -94,16 +75,14 @@ class ObRController extends Controller
             'pc3_time_in' => now(), 
         ]);
         
-        // ADDED: Updates PC 2 and PC 3 dashboards instantly
         ObrMoved::dispatch($obr);
 
         return redirect()->back();
     }
 
-    // PC 3 finishes and returns it to PC 1
     public function pc3Release(Request $request, $id)
     {
-        $obr = ObligationRequest::find($id); // Safety Net
+        $obr = ObligationRequest::find($id); 
         if (!$obr) return back(); 
 
         $obr->update([
@@ -113,46 +92,45 @@ class ObRController extends Controller
             'pc3_time_out' => now() 
         ]);
 
-        // ADDED: Updates PC 2 and PC 3 dashboards instantly
         ObrMoved::dispatch($obr);
 
-        return back()->with('success', 'Finalized! Returned to PC 1.');
+        return back()->with('success', 'Finalized! Transferred to PC 4.');
     }
 
-   public function finalRelease($id)
+    // UPDATED: Now accepts a Request to save the preview edits!
+    public function finalRelease(Request $request, $id)
     {
-        $obr = ObligationRequest::find($id); // Safety Net
+        $obr = ObligationRequest::find($id); 
         if (!$obr) return back(); 
         
         $finishTime = now();
         
-        // AUTO-CALCULATION
-        $startTime = $obr->pc1_time_in ? \Carbon\Carbon::parse($obr->pc1_time_in) : $obr->created_at;
-        
-        // ADDED: Fixed calculation to get accurate decimal minutes (e.g. 1.5 mins)
+        $startTime = $obr->pc1_time_in ? Carbon::parse($obr->pc1_time_in) : $obr->created_at;
         $totalMinutes = $startTime->diffInSeconds($finishTime) / 60;
         
         $obr->update([
+            'analyze_control_data' => $request->has('analyze_control_data') ? $request->analyze_control_data : $obr->analyze_control_data,
+            'pc3_signatory' => $request->has('pc3_signatory') ? $request->pc3_signatory : $obr->pc3_signatory,
+            'pc3_remarks' => $request->has('pc3_remarks') ? $request->pc3_remarks : $obr->pc3_remarks,
             'status' => 'completed',
             'pc1_final_release' => $finishTime, 
             'total_minutes' => $totalMinutes 
         ]);
 
-        // ADDED: Updates PC 2 and PC 3 dashboards instantly
         ObrMoved::dispatch($obr);
 
         return back()->with('success', 'ObR Officially Completed and Time Calculated!');
     }
 
-   public function exportReport(Request $request) 
+    public function exportReport(Request $request) 
     {
         try {
             $query = ObligationRequest::where('status', 'completed')
                                       ->orderBy('created_at', 'desc');
 
             if ($request->filled('start_date') && $request->filled('end_date')) {
-                $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
-                $end = \Carbon\Carbon::parse($request->end_date)->endOfDay();
+                $start = Carbon::parse($request->start_date)->startOfDay();
+                $end = Carbon::parse($request->end_date)->endOfDay();
                 
                 $query->whereBetween('pc1_final_release', [$start, $end]);
             }
@@ -165,19 +143,11 @@ class ObRController extends Controller
                 
             $filename = "ObR_Report" . $fileDateInfo . ".csv";
 
-            // UPDATED: Columns arranged exactly in the requested order
             $columns = [
-                'Date', 
-                'Time Received', 
-                'ObR No.', 
-                'Process 1 Duration',
-                'Time (PC 1 Done)', 
-                'Analyze and Control', 
-                'Process 2 Duration',             // <--- Make sure this comma is here!
-                'Checked and Clarified by', 
-                'Process 3 Duration',
-                'Time Released', 
-                'Remarks'                    
+                'Date', 'Time Received', 'ObR No.', 'PC 1 Duration',
+                'Time (PC 1 Done)', 'Analyze and Control', 'PC 2 Duration',
+                'Checked and Clarified by', 'PC 3 Duration',
+                'Time Released', 'Remarks'                    
             ];
 
             $formatTime = function($mins) {
@@ -196,26 +166,22 @@ class ObRController extends Controller
                 fputcsv($file, $columns); 
 
                 foreach ($obrs as $obr) {
-                    // Time Parsing
-                    $start = $obr->created_at ? \Carbon\Carbon::parse($obr->created_at) : now();
-                    $pc1_in = $obr->pc1_time_in ? \Carbon\Carbon::parse($obr->pc1_time_in) : $start;
-                    $pc1_out = $obr->pc1_time_out ? \Carbon\Carbon::parse($obr->pc1_time_out) : null;
-                    $pc2_out = $obr->pc2_time_out ? \Carbon\Carbon::parse($obr->pc2_time_out) : null;
-                    $pc3_in = $obr->pc3_time_in ? \Carbon\Carbon::parse($obr->pc3_time_in) : null;
-                    $pc3_out = $obr->pc3_time_out ? \Carbon\Carbon::parse($obr->pc3_time_out) : null;
-                    $final_done = $obr->pc1_final_release ? \Carbon\Carbon::parse($obr->pc1_final_release) : ($obr->updated_at ? \Carbon\Carbon::parse($obr->updated_at) : ($pc3_out ?? $start));
+                    $start = $obr->created_at ? Carbon::parse($obr->created_at) : now();
+                    $pc1_in = $obr->pc1_time_in ? Carbon::parse($obr->pc1_time_in) : $start;
+                    $pc1_out = $obr->pc1_time_out ? Carbon::parse($obr->pc1_time_out) : null;
+                    $pc2_out = $obr->pc2_time_out ? Carbon::parse($obr->pc2_time_out) : null;
+                    $pc3_in = $obr->pc3_time_in ? Carbon::parse($obr->pc3_time_in) : null;
+                    $pc3_out = $obr->pc3_time_out ? Carbon::parse($obr->pc3_time_out) : null;
+                    $final_done = $obr->pc1_final_release ? Carbon::parse($obr->pc1_final_release) : ($obr->updated_at ? Carbon::parse($obr->updated_at) : ($pc3_out ?? $start));
 
-                    // Individual PC Duration Calculations
                     $pc1_duration = ($pc1_in && $pc1_out) ? $formatTime($pc1_in->diffInSeconds($pc1_out) / 60) : 'N/A';
                     $pc2_duration = ($pc1_out && $pc2_out) ? $formatTime($pc1_out->diffInSeconds($pc2_out) / 60) : 'N/A';
                     $pc3_duration = ($pc3_in && $pc3_out) ? $formatTime($pc3_in->diffInSeconds($pc3_out) / 60) : 'N/A';
 
-                    // Clock Time Formatting
                     $pc1_done_time = $pc1_out ? $pc1_out->format('h:i A') : 'N/A';
 
-                    // Putting data exactly matching the column order
                     fputcsv($file, [
-                        $obr->obr_date ? \Carbon\Carbon::parse($obr->obr_date)->format('M d, Y') : 'N/A', 
+                        $obr->obr_date ? Carbon::parse($obr->obr_date)->format('M d, Y') : 'N/A', 
                         $start->format('h:i A'), 
                         $obr->obr_number ?? 'N/A', 
                         $pc1_duration,
@@ -241,4 +207,4 @@ class ObRController extends Controller
             return redirect()->back()->withErrors('Export Error: ' . $e->getMessage());
         }
     }
-    }
+}
